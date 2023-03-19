@@ -1,32 +1,48 @@
-import { Controller, Get, Param } from "@nestjs/common";
+import { Controller, Get } from "@nestjs/common";
 import { GetDataService } from "./get-data.service";
 import { firstValueFrom } from "rxjs";
 import * as moment from 'moment';
+import puppeteer from 'puppeteer';
 
 @Controller("get-data")
 export class GetDataController {
   constructor(private readonly getDataService: GetDataService) {}
 
+  @Get('inicial')
+  async obtenerDatoWebInicial() {
+    const url = `https://reports.xymarketing.simtastic.cl/parques/parques`;
+
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.goto(url);
+
+    const anchors = await page.evaluate(() => {
+      const anchors = Array.from(document.querySelectorAll('a'));
+      return anchors.map(anchor => anchor.innerText);
+    });
+
+    await browser.close();
+
+    return anchors[anchors.length - 1]; // Se otiene siempre el ultimo nombre del archivo registrado
+  }
+
   @Get()
   async obtenerDatoWeb() {
 
-    const today: any = (moment());
-    const parseFechaActual: any = today.format('YYYY-MM-DD')
-    // const parseFechaActual: any = "20230317";
+    const nameFile = await this.obtenerDatoWebInicial();
+    // const today: any = (moment());
+    // const parseFechaActual: any = today.format('YYYY-MM-DD');
 
-
-    const url = `https://reports.xymarketing.simtastic.cl/parques/parques/parques_${parseFechaActual}212701.txt`;
+    const url = `https://reports.xymarketing.simtastic.cl/parques/parques/${nameFile}`;
 
     console.log(url);
 
     const data: any = await firstValueFrom(await this.getDataService.fetchDataFromWeb(url));
-    console.log(data);
 
     const lines: any = data.trim().split("\n").splice(1);
 
     const records: any = lines.map((line: any) => {
 
-      // const fields = line.split(/\t|\s{4,}/);
       const fields: any = line.split("\t").map((s:any) => s.replace(/\r$/, ""));
 
       return {
@@ -72,8 +88,8 @@ export class GetDataController {
       };
     });
 
-    console.log(records[0]);
+    console.log(records.length);
 
-    return "listo";
+    return 'listo';
   }
 }
