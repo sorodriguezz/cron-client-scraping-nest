@@ -33,7 +33,7 @@ export class GetDataController {
     // const today: any = (moment());
     // const parseFechaActual: any = today.format('YYYY-MM-DD');
 
-    const url = `https://reports.xymarketing.simtastic.cl/parques/parques/${nameFile}`;
+    const url = `url_sitio`;
 
     console.log(url);
 
