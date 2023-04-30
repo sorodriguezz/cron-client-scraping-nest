@@ -10,7 +10,7 @@ export class GetDataController {
 
   @Get('inicial')
   async obtenerDatoWebInicial() {
-    const url = `https://reports.xymarketing.simtastic.cl/parques/parques`;
+    const url = `url_sitio`;
 
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
