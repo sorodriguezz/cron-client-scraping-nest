@@ -1,14 +1,25 @@
 import { Controller, Get } from "@nestjs/common";
 import { GetDataService } from "./get-data.service";
-import { firstValueFrom } from "rxjs";
-import * as moment from 'moment';
-import puppeteer from 'puppeteer';
+import { firstValueFrom } from 'rxjs';
+import puppeteer from "puppeteer";
+import * as fs from "fs";
 
 @Controller("get-data")
 export class GetDataController {
-  constructor(private readonly getDataService: GetDataService) {}
+  private startDate: Date;
+  private today: Date;
 
-  @Get('inicial')
+  constructor(private readonly getDataService: GetDataService) {
+    this.startDate = new Date(2023, 1, 2); // 2 de febrero de 2023
+    this.today = new Date();
+  }
+
+  private differenceInDays(date1: Date, date2: Date): number {
+    const oneDay = 24 * 60 * 60 * 1000;
+    return Math.round((date2.getTime() - date1.getTime()) / oneDay);
+  }
+
+  @Get("inicial")
   async obtenerDatoWebInicial() {
     const url = `url_sitio`;
 
@@ -17,8 +28,8 @@ export class GetDataController {
     await page.goto(url);
 
     const anchors = await page.evaluate(() => {
-      const anchors = Array.from(document.querySelectorAll('a'));
-      return anchors.map(anchor => anchor.innerText);
+      const anchors = Array.from(document.querySelectorAll("a"));
+      return anchors.map((anchor) => anchor.innerText);
     });
 
     await browser.close();
@@ -28,68 +39,99 @@ export class GetDataController {
 
   @Get()
   async obtenerDatoWeb() {
+    let currentDate = new Date(this.startDate);
+    const daysDifference = this.differenceInDays(this.startDate, this.today);
 
-    const nameFile = await this.obtenerDatoWebInicial();
-    // const today: any = (moment());
-    // const parseFechaActual: any = today.format('YYYY-MM-DD');
+    for (let i = 0; i <= daysDifference; i++) {
+      // Crear la URL basada en la fecha
+      const formattedDate = `${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, "0")}${String(currentDate.getDate()).padStart(2, "0")}`;
+      const url = `https://reports.xymarketing.simtastic.cl/parques/parques/parques_${formattedDate}.txt`;
+      try {
+        const registros = await this.obtenerDatosWeb(url, formattedDate);
+        const inserts = this.generarSQL(registros);
+        this.generarArchivo(inserts, formattedDate);
+      } catch (error) {
+        console.log(`No existe registro para el dia ${formattedDate}`);
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
-    const url = `url_sitio`;
+    return "listo";
+  }
 
-    console.log(url);
+  generarSQL(data: any[]) {
+    const keys = Object.keys(data[0]).join(', ');
 
-    const data: any = await firstValueFrom(await this.getDataService.fetchDataFromWeb(url));
+    const insertStatements = data.map(entry =>
+        `INSERT INTO PRISMA.PRM_CARGA_XY (${keys}) VALUES (${Object.values(entry).map(value => `'${value}'`).join(', ')});`
+    ).join('\n');
 
-    const lines: any = data.trim().split("\n").splice(1);
+    return insertStatements;
+  }
+
+  async generarArchivo(sqlStatement: any, date: string) {
+    try {
+      await fs.promises.writeFile(`data/parques_${date}.sql`, sqlStatement);
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  private async obtenerDatosWeb(url: string, date: string) {
+    const data: any = await firstValueFrom(
+      await this.getDataService.fetchDataFromWeb(url)
+    );
+
+    const lines: any = data.trim().split("\n").splice(1); // Se elimina la primera linea del archivo y se separa por saltos de linea
 
     const records: any = lines.map((line: any) => {
-
-      const fields: any = line.split("\t").map((s:any) => s.replace(/\r$/, ""));
+      const fields: any = line
+        .split("\t")
+        .map((s: any) => s.replace(/\r$/, "")); // Se separa por tabulaciones y se elimina el ultimo caracter de cada linea
 
       return {
-        call_date: fields[0],
-        phone_number_dialed: fields[1],
-        status: fields[2],
-        user: fields[3],
-        full_name: fields[4],
-        campaign_id: fields[5],
-        vendor_lead_code: fields[6],
-        source_id: fields[7],
-        list_id: fields[8],
-        gmt_offset_now: fields[9],
-        phone_code: fields[10],
-        phone_number: fields[11],
-        title: fields[12],
-        first_name: fields[13],
-        middle_initial: fields[14],
-        last_name: fields[15],
-        address1: fields[16],
-        address2: fields[17],
-        address3: fields[18],
-        city: fields[19],
-        state: fields[20],
-        province: fields[21],
-        postal_code: fields[22],
-        country_code: fields[23],
-        gender: fields[24],
-        date_of_birth: fields[25],
-        alt_phone: fields[26],
-        email: fields[27],
-        security_phrase: fields[28],
-        comments: fields[29],
-        length_in_sec: fields[30],
-        user_group: fields[31],
-        alt_dial: fields[32],
-        rank: fields[33],
-        owner: fields[34],
-        lead_id: fields[35],
-        list_name: fields[36],
-        list_description: fields[37],
-        status_name: fields[38],
+        call_date: fields[0].replace(/'/g, ""),
+        phone_number_dialed: fields[1].replace(/'/g, ""),
+        status: fields[2].replace(/'/g, ""),
+        user_xy: fields[3].replace(/'/g, ""),
+        full_name: fields[4].replace(/'/g, ""),
+        campaign_id: fields[5].replace(/'/g, ""),
+        vendor_lead_code: fields[6].replace(/'/g, ""),
+        source_id: fields[7].replace(/'/g, ""),
+        list_id: fields[8].replace(/'/g, ""),
+        gmt_offset_now: fields[9].replace(/'/g, ""),
+        phone_code: fields[10].replace(/'/g, ""),
+        phone_number: fields[11].replace(/'/g, ""),
+        title: fields[12].replace(/'/g, ""),
+        first_name: fields[13].replace(/'/g, ""),
+        middle_initial: fields[14].replace(/'/g, ""),
+        last_name: fields[15].replace(/'/g, ""),
+        address1: fields[16].replace(/'/g, ""),
+        address2: fields[17].replace(/'/g, ""),
+        address3: fields[18].replace(/'/g, ""),
+        city: fields[19].replace(/'/g, ""),
+        state: fields[20].replace(/'/g, ""),
+        province: fields[21].replace(/'/g, ""),
+        postal_code: fields[22].replace(/'/g, ""),
+        country_code: fields[23].replace(/'/g, ""),
+        gender: fields[24].replace(/'/g, ""),
+        date_of_birth: fields[25].replace(/'/g, ""),
+        alt_phone: fields[26].replace(/'/g, ""),
+        email: fields[27].replace(/'/g, ""),
+        security_phrase: fields[28].replace(/'/g, ""),
+        comments: fields[29].replace(/'/g, ""),
+        lenght_insec: fields[30].replace(/'/g, ""),
+        user_group: fields[31].replace(/'/g, ""),
+        alt_dial: fields[32].replace(/'/g, ""),
+        rank: fields[33].replace(/'/g, ""),
+        owner: fields[34].replace(/'/g, ""),
+        lead_id: fields[35].replace(/'/g, ""),
+        list_name: fields[36].replace(/'/g, ""),
+        list_description: fields[37].replace(/'/g, ""),
+        status_name: fields[38].replace(/'/g, ""),
+        prm_carga_xy_log_nombre_arch: `parques_${date}.txt`,
       };
     });
-
-    console.log(records.length);
-
-    return 'listo';
+    return records;
   }
 }
