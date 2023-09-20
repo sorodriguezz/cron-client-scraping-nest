@@ -10,7 +10,7 @@ export class GetDataController {
   private today: Date;
 
   constructor(private readonly getDataService: GetDataService) {
-    this.startDate = new Date(2023, 1, 2); // 2 de febrero de 2023
+    this.startDate = new Date(2023, 8, 6); // 6 de septiembre de 2023
     this.today = new Date();
   }
 
